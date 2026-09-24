@@ -1,0 +1,69 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "① 安装依赖（npm install）",
+      "detail": "首次使用或删过 node_modules 之后跑一次",
+      "type": "shell",
+      "command": "npm.cmd install",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": true
+      }
+    },
+    {
+      "label": "② 启动开发服务器（npm run dev）",
+      "detail": "热更新预览，地址 http://localhost:3000  ← 平时用这个",
+      "type": "shell",
+      "command": "npm.cmd run dev",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "③ 生产构建（npm run build）",
+      "detail": "验证能否上线，同时做类型检查",
+      "type": "shell",
+      "command": "npm.cmd run build",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "④ 类型检查（npm run typecheck）",
+      "detail": "只跑 tsc，不构建，改完代码快速自查",
+      "type": "shell",
+      "command": "npm.cmd run typecheck",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    },
+    {
+      "label": "⑤ 构建并预览生产版本（npm run preview）",
+      "detail": "先 build 再 start，看到的效果就是上线后的效果",
+      "type": "shell",
+      "command": "npm.cmd run preview",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true
+      }
+    }
+  ]
+}

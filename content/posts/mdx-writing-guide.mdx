@@ -1,0 +1,107 @@
+---
+title: 'MDX 写作指南：这个博客里能用的全部语法'
+date: '2026-07-03'
+summary: '把 Markdown 当代码写之后，能用的东西比想象中多：GFM 表格、任务列表、代码高亮、自定义提示框，以及可以切换成 React 组件的任意一段文字。'
+tags: ['MDX', '写作', '工程实践']
+draft: false
+---
+
+这篇既是语法备忘，也是给自己看的写作规范。所有示例都在本站生效，可以直接抄。
+
+## Frontmatter 是文章的唯一"元数据入口"
+
+```yaml
+---
+title: '文章标题'
+date: '2026-07-03'
+summary: '一句话摘要，会出现在首页卡片、SEO description 和 RSS 里。'
+tags: ['MDX', '写作']
+cover: '/og-cover.svg'
+draft: false
+---
+```
+
+`draft: true` 的文章在开发时可见、在 `next build` 时被过滤掉——这是最轻量的草稿机制。
+
+## 基础排版
+
+**加粗**、*斜体*、~~删除线~~、`行内代码`，以及 [站内链接](/tags) 和 [外部链接](https://nextjs.org)。
+
+引用长这样：
+
+> 写作是把模糊的直觉逼成清晰句子的过程。
+> 如果一句话写不清楚，通常是还没想清楚。
+
+## 表格与任务列表（GFM）
+
+| 语法 | 渲染结果 | 常用场景 |
+| --- | --- | --- |
+| `**文字**` | 加粗 | 强调结论 |
+| `> 文字` | 引用块 | 摘录、金句 |
+| `- [ ]` | 待办框 | 计划、清单 |
+
+任务列表示例：
+
+- [x] 写完这篇文章
+- [ ] 补一张流程图
+- [ ] 校对错别字
+
+## 代码块
+
+带语言标注就会自动高亮，语言名交给 highlight.js 判断：
+
+```tsx
+export function TagBadge({ tag }: { tag: string }) {
+  // 中文标签一定要编码，否则路由匹配不上
+  return <Link href={`/tags/${encodeURIComponent(tag)}`}>{tag}</Link>;
+}
+```
+
+```bash
+npm run dev     # 本地开发，带热更新
+npm run build   # 构建，顺便做类型检查
+npm start       # 用构建产物起一个本地服务
+```
+
+## 自定义组件：Callout
+
+因为 `components/mdx/index.tsx` 里注册过，正文里可以**不 import 直接用**：
+
+<Callout type="tip" title="提示">
+用来补充背景知识，或者给一个更省事的做法。
+</Callout>
+
+<Callout type="warn" title="注意">
+用来标记坑：版本差异、容易配错的参数、线上才会暴露的问题。
+</Callout>
+
+<Callout type="info">
+不写 title 就用默认标题。
+</Callout>
+
+## 图片
+
+本地图片直接写相对路径，比如 `/og-cover.svg`：
+
+![本站默认封面](/og-cover.svg)
+
+<Callout type="info" title="为什么不用 next/image">
+远程图片优化要配 `images.remotePatterns`，对个人博客是额外负担。
+想要自动压缩和 WebP 时再换，代价是部署前要记得声明图片域名。
+</Callout>
+
+## 目录是怎么来的
+
+文章开头的目录不是手写的：构建时扫描正文里的二三级标题，用和 `rehype-slug` 同一套规则（github-slugger）算出锚点 id，所以点击必然能跳到正确位置。
+
+<Callout type="warn" title="两个约定">
+正文里不要再写一级标题（`#`），页面标题已经由 frontmatter 提供；
+标题里最好别塞行内代码，否则锚点文本会带上多余反引号。
+</Callout>
+
+## 写作清单
+
+- [x] 先写摘要，逼自己想清楚这篇要说什么
+- [x] 代码块一定标语言
+- [x] 结论放最前面，铺垫放后面
+- [ ] 每篇至少一张图或一张表

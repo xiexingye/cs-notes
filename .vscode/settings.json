@@ -1,0 +1,34 @@
+{
+  // 让 VS Code 把 .mdx 当 MDX 语言处理（有语法高亮和 JSX 支持）
+  "files.associations": {
+    "*.mdx": "mdx"
+  },
+
+  // 保存时自动格式化（需要装 Prettier 扩展，见 extensions.json）
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit"
+  },
+
+  // 行尾统一 LF，避免 Windows 提交后被 Git 整文件判为改动
+  "files.eol": "\n",
+
+  // 构建产物与依赖目录不参与搜索和文件监听，能明显省内存
+  "search.exclude": {
+    "**/.next": true,
+    "**/node_modules": true,
+    "**/package-lock.json": true
+  },
+  "files.watcherExclude": {
+    "**/.next/**": true,
+    "**/node_modules/**": true
+  },
+
+  // 让 Tailwind 扩展认识 v4 的 CSS-first 写法（@theme / @import "tailwindcss"）
+  "tailwindCSS.classAttributes": ["class", "className", "className:.*"],
+  "css.lint.unknownAtRules": "ignore",
+
+  "typescript.tsdk": "node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}

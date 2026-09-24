@@ -1,0 +1,15 @@
+# 统一换行符：避免在 Windows 提交、Linux（Vercel）构建时出现整文件 diff
+* text=auto eol=lf
+
+# 二进制文件不做行尾转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+
+# 让 GitHub 正确识别语言统计
+*.mdx linguist-language=MDX

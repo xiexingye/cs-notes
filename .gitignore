@@ -1,0 +1,33 @@
+# 依赖与构建产物
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# 环境变量（.env.example 需要提交，其余不要）
+.env
+.env.local
+.env*.local
+
+# Vercel
+.vercel/
+
+# 编辑器与系统
+# .vscode 里只保留共享配置（启动任务、调试配置、推荐扩展），个人偏好不入库
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# 日志与缓存
+*.log
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.tsbuildinfo
+next-env.d.ts

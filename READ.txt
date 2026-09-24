@@ -1,0 +1,487 @@
+================================================================================
+  个人博客站 · 搭建说明（Next.js + MDX + Vercel）
+  文件位置：nextjs-mdx-blog/READ.txt
+  这份文档讲三件事：用了什么技术、为什么这么搭、怎么跑起来/怎么发文章/怎么部署
+================================================================================
+
+
+一、这个项目是什么
+--------------------------------------------------------------------------------
+【站点信息速查 —— 要改名字/域名/作者，全都在 lib/site.ts 这一个文件里】
+    中文站名    计算机学习笔记          site.name
+    英文站名    CS Notes               site.englishName（同时建议用作仓库名/域名前缀）
+    线上域名    https://cs-notes.vercel.app   site.url（也受环境变量 NEXT_PUBLIC_SITE_URL 控制）
+    作者        谢幸烨                  site.author.name
+    作者邮箱/仓库  暂未填写（留空字符串就不显示，填上自动出现）
+    分享封面    public/og-cover.svg（图上的站名是写死的文字，改名要一起改）
+
+一个纯静态的个人博客站。特点可以概括成一句话：
+
+    "文章就是仓库里的 .mdx 文件，构建时编译成 HTML，整站丢到 CDN 上，没有数据库。"
+
+具体能力：
+  - 首页文章列表（按年份归档）
+  - 文章详情页：正文排版、代码高亮、目录、上下篇导航
+  - 标签页 + 单个标签的文章列表
+  - 关于页、404 页
+  - RSS 订阅（/rss.xml）、站点地图（/sitemap.xml）、robots.txt（/robots.txt）
+  - 自动深色模式（跟随系统，不需要 JavaScript 切换）
+  - 每篇文章独立的 SEO 元信息（title / description / canonical / Open Graph）
+  - 草稿机制：frontmatter 里 draft: true 的文章只在开发环境可见
+
+
+二、技术栈（每一项为什么选它）
+--------------------------------------------------------------------------------
+【核心框架】
+  Next.js 16.3.6（App Router）  https://nextjs.org
+      作用：文件路由、服务端组件（RSC）、构建期静态生成（SSG）。
+      为什么：App Router 允许"整个页面在服务端跑完再输出 HTML"，
+              这样读文件、编译 MDX 这些 Node 侧操作可以自然地写在页面组件里，
+              不需要 getStaticProps 那套数据传递约定。
+      替代方案：Astro（内容站更轻，但生态偏静态）、Gatsby（构建慢、维护转弱）、
+                Vite + 手写 SSG（可控但什么都要自己写）。
+
+  React 19.3.0
+      Next 的运行时，也是 MDX 编译产物的执行环境。
+
+  TypeScript 5.x
+      文章数据层（lib/posts.ts）的类型都在这里定义，
+      PostMeta / Post / Heading 三个类型是"内容模型"的唯一事实来源。
+      另外 next build 会顺带做类型检查，类型错误直接让构建失败。
+
+【内容与渲染】
+  MDX（next-mdx-remote 6.0.0，内核是 @mdx-js/mdx 3）
+      作用：让 Markdown 里可以直接写 React 组件和 JSX。
+      为什么用 next-mdx-remote 而不是官方的 @next/mdx：
+        @next/mdx 的思路是"把 .mdx 当页面文件"，文件必须放在 app 目录里参与路由，
+        而博客需要的是"把 .mdx 当数据"，放在 content 目录里由自己决定怎么读。
+        next-mdx-remote 提供 <MDXRemote source={字符串} />，正好匹配这个用法。
+      替代方案：Contentlayer（已停止维护，不建议新项目用）、
+                Velite（思路相同，社区较小）、无头 CMS（要联网、要账号、有额度）。
+
+  gray-matter 4.0.3
+      作用：把 .mdx 文件拆成 frontmatter（元数据）和正文两部分。
+      为什么：稳定、无依赖、被几乎所有静态博客使用。
+
+  remark-gfm 4.0.1
+      作用：支持 GitHub 风格 Markdown——表格、任务列表、删除线、自动链接。
+      为什么：写技术文章基本离不开表格和待办清单。
+
+  rehype-slug 6.0.0 + github-slugger 2.0.0
+      作用：给正文标题加 id 锚点。
+      为什么额外装 github-slugger：目录（TOC）是在构建期从源码里抽出来的，
+      必须和 rehype-slug 用同一套规则算锚点，否则点击目录跳不过去。
+      两者共用同一个库，才能保证 id 完全一致。
+
+  rehype-autolink-headings 7.1.0
+      作用：标题旁边加一个隐藏的 # 回链，鼠标悬停才显示，方便复制锚点。
+
+  rehype-highlight 7.0.2（内核 highlight.js）
+      作用：代码块语法高亮。
+      为什么：比 Shiki 轻，不需要在构建时加载一堆语言语法文件；
+      配色没有引第三方主题 CSS，而是在 app/globals.css 里自己定义 .hljs-* 颜色，
+      这样才能同时适配浅色和深色。
+      替代方案：rehype-pretty-code / Shiki（配色更精致，构建更慢、体积更大）。
+
+【样式】
+  Tailwind CSS 4.3.3（+ @tailwindcss/postcss）
+      作用：原子化 CSS。
+      为什么：Tailwind v4 改成 CSS-first 配置，不再需要 tailwind.config.js，
+      主题变量直接写在 app/globals.css 的 @theme 里，配色统一由 CSS 变量驱动，
+      深色模式只需覆盖变量，组件代码一行都不用改。
+      替代方案：CSS Modules（本项目里的 .prose 排版其实就是手写 CSS 的思路）。
+
+【部署】
+  Vercel
+      作用：托管 + CI/CD + 全球 CDN。
+      为什么：Next.js 是 Vercel 自家框架，零配置识别；
+      连接 Git 后每次 push 自动构建，PR 自动生成预览环境。
+      替代方案：Netlify、Cloudflare Pages（都支持 Next，但对 App Router 的
+                高级特性支持不一定完整）；也可以打开 next.config.mjs 里的
+                output: 'export' 导出纯静态文件，丢到任意静态托管上。
+
+
+三、项目结构（每个文件干什么）
+--------------------------------------------------------------------------------
+nextjs-mdx-blog/
+├─ content/posts/            文章源文件，一个 .mdx 一篇；**文件名就是 URL 里的 slug**
+│   ├─ hello-world.mdx
+│   ├─ nextjs-app-router-ssg.mdx
+│   └─ mdx-writing-guide.mdx
+├─ lib/
+│   ├─ site.ts               站点配置（站名、作者、导航、域名解析）——只改这里
+│   └─ posts.ts              文章数据层：读文件、解析 frontmatter、排序、标签聚合、
+│                            阅读时长估算、目录抽取（**整个站的核心**）
+├─ components/
+│   ├─ SiteHeader.tsx        页头（吸顶 + 导航）
+│   ├─ SiteFooter.tsx        页脚
+│   ├─ PostCard.tsx          列表里的文章卡片
+│   ├─ TagBadge.tsx          标签徽章（负责编码中文标签）
+│   ├─ TableOfContents.tsx   文章目录
+│   ├─ Callout.tsx           自定义提示框组件（MDX 里直接用 <Callout>）
+│   └─ mdx/index.tsx         MDX 组件映射表：a / img / Callout 怎么渲染
+├─ app/
+│   ├─ layout.tsx            根布局：全站 metadata、页头页脚、引入全局样式
+│   ├─ page.tsx              首页：文章列表（按年份分组）
+│   ├─ globals.css           设计令牌 + 基础样式 + 正文排版 + 代码高亮配色
+│   ├─ icon.svg              站点 favicon
+│   ├─ not-found.tsx         404 页
+│   ├─ about/page.tsx        关于页
+│   ├─ blog/[slug]/page.tsx  文章详情页（静态生成 + 目录 + 上下篇）
+│   ├─ tags/page.tsx         标签云
+│   ├─ tags/[tag]/page.tsx   某个标签下的文章
+│   ├─ rss.xml/route.ts      RSS 2.0 订阅源
+│   ├─ sitemap.ts            /sitemap.xml
+│   └─ robots.ts             /robots.txt
+├─ public/
+│   └─ og-cover.svg          默认社交分享封面（1200×630）
+├─ next.config.mjs           Next 配置
+├─ postcss.config.mjs        接入 Tailwind v4
+├─ tsconfig.json             TypeScript 配置（@/* 别名指向项目根）
+├─ .env.example              环境变量示例
+└─ .gitignore
+
+
+四、搭建思路（按数据流动的顺序分六步）
+--------------------------------------------------------------------------------
+这套东西的本质是一条流水线：**磁盘上的 .mdx 文件 → 构建期的数据 → 静态 HTML**。
+理解这条流水线，整个项目就没有难点了。
+
+第 1 步：数据层（lib/posts.ts）
+    用 node:fs 直接读 content/posts 目录，gray-matter 拆出 frontmatter 和正文，
+    然后做四件事：
+      - 排序：按日期倒序
+      - 过滤：生产构建时剔除 draft: true
+      - 聚合：算出所有标签及每篇文章数（标签云用）
+      - 派生：估算阅读时长和字数、从正文抽取 h2/h3 生成目录
+    对外暴露 getAllPosts / getPostBySlug / getAllPostSlugs / getAllTags /
+    getPostsByTag / getAdjacentPosts 这几个函数。
+    ★ 关键认识：这些函数只会在服务端（构建期）运行，永远不会打包进浏览器。
+
+第 2 步：渲染层（app/blog/[slug]/page.tsx）
+    把第 1 步拿到的正文字符串交给 <MDXRemote source={...} />，
+    它内部用 @mdx-js/mdx 在服务端把 MDX 编译成 React 组件树。
+    插件流水线（这是 MDX 的核心概念）：
+      remark 阶段（处理 Markdown 语法树）：remark-gfm
+      rehype 阶段（处理 HTML 语法树）：rehype-slug → rehype-autolink-headings → rehype-highlight
+    自定义渲染：components/mdx/index.tsx 里把 a / img / Callout 映射成自己的组件。
+
+第 3 步：路由与静态化
+    文章路径在构建期就全部算出来：
+      generateStaticParams() 返回所有 slug  →  next build 为每个 slug 预渲染一份 HTML
+      dynamicParams = false   →  没预渲染过的 slug 直接 404，不按需渲染
+    同样的套路用在 tags/[tag]/page.tsx（遍历所有标签）。
+    结果：全站没有需要 Node 常驻的页面，部署后只剩 CDN 静态分发。
+
+第 4 步：SEO 与订阅
+    - app/layout.tsx 里的 metadata 管全站默认值（含 metadataBase，保证
+      canonical / og:image 输出绝对地址）
+    - 每篇文章的 generateMetadata 管自己的 title / description / canonical / og
+    - app/rss.xml/route.ts 用 Route Handler 拼 XML，配 dynamic = 'force-static'
+    - app/sitemap.ts 和 app/robots.ts 交给 Next 的约定式 API 生成
+
+第 5 步：样式
+    app/globals.css 里用 @theme 定义语义化颜色令牌（canvas / surface / ink /
+    muted / line / accent），组件里只写 bg-surface、text-muted、border-line 这类类名。
+    深色模式在同一份 CSS 里用 @media (prefers-color-scheme: dark) 覆盖令牌即可，
+    所以整站没有任何主题切换的 JavaScript。
+    正文排版集中写在 .prose 下（标题、列表、表格、引用、代码块），
+    一处定义，所有文章共享。
+
+第 6 步：部署
+    git push → Vercel 拉代码 → npm install → next build → 静态产物上 CDN。
+    整个部署过程不需要任何配置文件（Vercel 自动识别 Next.js）。
+
+
+五、一次访问到底发生了什么
+--------------------------------------------------------------------------------
+构建期（next build）：
+    1. Next 扫描 app/ 目录，发现 blog/[slug] 是个动态路由
+    2. 调用它的 generateStaticParams()，拿到 3 个 slug
+    3. 对每个 slug 调用 getPostBySlug()（读文件 + 解析 frontmatter）
+    4. MDXRemote 把正文编译成组件，remark/rehype 插件依次处理
+    5. React 把组件渲染成 HTML 字符串
+    6. 连同 CSS 一起写进 .next/ 目录，成为静态资源
+
+运行期（用户访问 /blog/hello-world）：
+    浏览器 → CDN 边缘节点 → 命中静态 HTML → 返回（不经过 Node、不读磁盘、不查数据库）
+    整个过程更像"下载一个文件"，而不是"运行一个程序"，所以又快又便宜。
+
+这也解释了静态博客的代价：**改了内容必须重新构建部署**，无法像 CMS 那样即时生效。
+
+
+六、本地怎么跑起来
+--------------------------------------------------------------------------------
+前置条件：Node.js >= 20.9（本项目验证环境为 Node 24.21 + npm 11.19）
+
+    cd nextjs-mdx-blog
+    npm install          # 装依赖，首次约 1~3 分钟
+    npm run dev          # 开发服务器，改文件即时热更新 → http://localhost:3000
+
+其他命令：
+
+    npm run build        # 生产构建（同时做类型检查）；失败会有明确报错
+    npm start            # 用构建产物起本地服务，验证真实效果
+    npm run typecheck    # 只跑 TypeScript 类型检查，不构建
+
+★ Windows 提示：如果 PowerShell 报 "禁止运行脚本 / npm.ps1 无法加载"，
+  这是执行策略拦截了 npm.ps1，改用 npm.cmd install / npm.cmd run dev 即可。
+
+
+【用 VS Code 启动（最省事的方式，本项目已配好 .vscode/）】
+
+  第 1 步：打开项目
+      VS Code → 文件 → 打开文件夹 → 选 nextjs-mdx-blog
+      （或在命令行进到该目录敲  code .  ）
+
+  第 2 步：装推荐扩展（可选，但强烈建议）
+      打开项目后 VS Code 会提示"此项目有推荐扩展"，点安装即可；
+      或按 Ctrl+Shift+X 搜索安装：Tailwind CSS IntelliSense、MDX、Prettier。
+      装完后 .mdx 有语法高亮，写 Tailwind 类名有自动补全。
+
+  第 3 步：启动开发服务器（三种任选其一）
+      A. 菜单栏：终端 → 运行任务 → 选「② 启动开发服务器（npm run dev）」   ← 推荐
+      B. 快捷键：Ctrl+Shift+B（② 已设为默认构建任务，直接就跑它）
+      C. 手动敲命令：终端 → 新建终端，输入  npm.cmd run dev
+
+  第 4 步：打开页面
+      终端会打印   - Local:  http://localhost:3000
+      按住 Ctrl 点这个地址，或自己复制到浏览器。改代码保存后页面自动刷新。
+
+  第 5 步：停止
+      在跑任务的终端里按 Ctrl+C（或点终端面板右上角的垃圾桶图标）。
+
+  ★ 调试（可选）：按 F5 会走 .vscode/launch.json 里的「启动并调试服务端」配置，
+    可以直接在 app/ 下的服务端组件里打断点。
+
+  ★ 为什么配置里写的是 npm.cmd 而不是 npm：
+    这台机器的 PowerShell 执行策略是默认的 Restricted，会拦掉 npm.ps1，
+    所以在 VS Code 终端里直接敲 npm run dev 会报"禁止运行脚本"。
+    任务与调试配置里统一用 npm.cmd 绕开这个坑，开箱即用。
+    想彻底解决（让命令行里的 npm 也能直接用，不需要管理员权限）：
+        Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
+
+
+七、怎么发一篇新文章
+--------------------------------------------------------------------------------
+1. 在 content/posts/ 下新建一个 .mdx 文件，**文件名就是文章 URL**：
+      content/posts/my-first-post.mdx  →  /blog/my-first-post
+   （建议用英文小写 + 连字符，避免中文文件名）
+
+2. 开头写 frontmatter：
+
+      ---
+      title: '文章标题'
+      date: '2026-09-24'
+      summary: '一句话摘要，会出现在首页卡片、SEO description、RSS 里'
+      tags: ['标签A', '标签B']
+      cover: '/og-cover.svg'    # 可选
+      draft: false              # true 时只在本地开发可见
+      ---
+
+3. 正文直接写 Markdown / MDX，可以用：
+       - 表格、任务列表、删除线（remark-gfm）
+       - ```ts 代码块，自动高亮
+       - <Callout type="tip|warn|info" title="...">…</Callout>
+       - 一级标题不要写（页面标题已由 frontmatter 提供），从 ## 开始
+
+4. npm run dev 看效果，满意后 git push，Vercel 自动发布。
+
+
+八、怎么让它上线（做到"本地什么都不用跑"也能访问）
+--------------------------------------------------------------------------------
+先给结论：**只要构建发生在别人的服务器上，你本地就完全不用启动任何东西。**
+下面三条路，按推荐程度排。A、B 两条本地连 Node 都可以不装。
+
+──────────────────────────────────────────────────────────────
+方式 A：GitHub + Vercel（最推荐，之后本地什么都不用开）
+──────────────────────────────────────────────────────────────
+    1. 推到 GitHub（仓库名建议用英文，比如 cs-notes）：
+         cd C:\Users\AppleRepair\Desktop\nextjs-mdx-blog
+         git remote add origin https://github.com/<你的用户名>/cs-notes.git
+         git push -u origin main
+       （本地仓库已经建好了，分支 main，直接加 remote 推上去即可）
+    2. 打开 https://vercel.com → 用 GitHub 账号登录 → Add New → Project
+    3. 选 cs-notes 仓库 → Framework Preset 会自动识别成 Next.js → 点 Deploy
+       ★ 构建跑在 Vercel 的服务器上：本地不需要装 Node、不需要开终端、不需要 npm install
+    4. 约 40 秒后拿到公网地址：https://cs-notes.vercel.app
+    5. 到 Settings → Environment Variables 加一条：
+         NEXT_PUBLIC_SITE_URL = https://cs-notes.vercel.app
+       然后 Deployments → 最新那条 → Redeploy
+       （这个变量在构建期内联，不重新部署不生效）
+    6. 想用自己的域名：Settings → Domains → 填域名 → 按提示改 DNS
+
+    以后写文章只要：写 .mdx → git push。Vercel 自动重建上线，本地一次都不用跑。
+
+──────────────────────────────────────────────────────────────
+方式 B：不走 GitHub，命令行直接部署（想立刻拿到地址就用这个）
+──────────────────────────────────────────────────────────────
+    在项目目录里：
+         npx vercel          # 首次要求登录（浏览器点一下授权），问项目名就填 cs-notes
+         npx vercel --prod   # 发布到生产环境并输出正式地址
+
+    ★ 同样是"Vercel 服务器构建"，本地只负责提交源码。
+      缺点：没有 Git 集成，以后每次改完都要手动再跑一次 --prod。
+
+──────────────────────────────────────────────────────────────
+方式 C：导出纯静态文件，拖到任意静态托管（不绑定 Vercel）
+──────────────────────────────────────────────────────────────
+    适合"不想注册 Vercel / 想放 GitHub Pages / 想塞进自己服务器"的情况。
+    导出后整站就是一堆 HTML+CSS+JS，任何静态托管都能跑，也不需要 Node。
+
+        PowerShell:   $env:STATIC_EXPORT=1; npm.cmd run build
+        cmd:          set STATIC_EXPORT=1 && npm run build
+
+    产物在 out/ 目录（入口 out/index.html）。然后任选一个：
+      - Netlify Drop：打开 https://app.netlify.com/drop，把 out 文件夹拖进去，
+        几秒钟就给你一个公网地址（不用 Git，也不用命令行）
+      - Cloudflare Pages：Workers & Pages → Create → Pages → Upload assets → 上传 out
+      - GitHub Pages：把 out 推到 gh-pages 分支
+      - 自己的服务器：把 out 里的文件丢进网站根目录
+
+    ★ 想恢复常规模式，重新跑一次不带该变量的 npm run build 即可
+      （导出产物没有 Node 服务，所以导出状态下 npm start / npm run preview 不可用）。
+
+──────────────────────────────────────────────────────────────
+补充：不启动服务，能不能直接双击网页文件看？
+──────────────────────────────────────────────────────────────
+    基本不行。这是个需要构建的 Next 项目：文章是 .mdx，必须先编译成 HTML。
+    双击 out/index.html 也大概率白屏——静态导出里的资源引用是绝对路径，
+    file:// 协议下加载不到。所以"不本地运行"的正解是把构建交给云端（A / B）
+    或交给静态托管（C），而不是想办法绕开构建这一步。
+
+★ Git 提交身份：仓库已初始化（分支 main，只有一个初始提交，作者为
+      谢幸烨 <xiexingye@example.com>）
+  example.com 是保留给文档示例用的假域名。推到 GitHub 前换成你的真实邮箱
+  （GitHub 靠邮箱把提交关联到你的账号）。因为只有一个提交，一条命令就能改写：
+
+      git config user.name  "谢幸烨"
+      git config user.email "你的真实邮箱"
+      git commit --amend --reset-author --no-edit
+
+  node_modules / .next / out 都是依赖与构建产物，已在 .gitignore 中排除；
+  入库的是 39 个源文件（含 .vscode 里的启动与调试配置）。
+
+
+九、做过的取舍与已知限制
+--------------------------------------------------------------------------------
+1. 没有数据库、没有后台、没有评论系统：文章即文件，改动走 Git。
+   代价是没有在线编辑器，多人协作也麻烦——个人博客可以接受。
+2. 改一个字要重新部署（约 20~40 秒）。换来的是零服务器运维。
+3. .env.example 里的 NEXT_PUBLIC_SITE_URL 在构建期内联，
+   改完必须重新部署；这是 Next 的机制，不是配置错误。
+4. og:image 目前指向 SVG。浏览器能显示，但微信/Twitter 等平台多数只认
+   PNG/JPEG，正式上线建议换成 1200×630 的 PNG。
+5. 图片用原生 <img>，没走 next/image 的自动压缩与 WebP 转换。
+   要开优化：改 components/mdx/index.tsx，并在 next.config.mjs 配 remotePatterns。
+6. 没有全文搜索。计划用 Pagefind：构建完扫一遍生成的 HTML，纯静态也能搜。
+7. 正文里不能出现裸的 < 和 {，它们是 MDX 的 JSX 语法。
+   写比较运算符请包进 `行内代码` 或用全角字符。
+8. 每一篇文章都在构建期编译，文章量到几百篇后构建时间会线性增长。
+9. 首屏仍然会加载 Next 的框架运行时（React + 路由）。实测文章页 7 个 chunk、
+   原始 562 KB、gzip 后约 173 KB——这是 App Router 的起步成本，
+   与页面里有没有客户端组件无关；"没有 'use client'"省掉的是业务代码那部分。
+
+
+十、下一步可以加什么
+--------------------------------------------------------------------------------
+  - 全文搜索：Pagefind（构建后处理，零服务端）
+  - 评论：Giscus（基于 GitHub Discussions，无需自建后端）
+  - 分页：首页文章多了之后按 10 篇一页，用 searchParams 或独立路由
+  - 自动生成 OG 图：@vercel/og，按标题动态画分享图
+  - 数学公式：remark-math + rehype-katex
+  - 图表：mermaid 代码块渲染流程图
+  - 图片灯箱、阅读进度条、View Transitions 页面过渡动画
+  - RSS 输出全文而不只是摘要
+
+
+十一、常见问题 / 踩坑清单
+--------------------------------------------------------------------------------
+Q：为什么 params 要 await？
+A：Next 15 起 params / searchParams 是 Promise，必须写成
+   const { slug } = await params;（同步访问会有类型错误和弃用告警）
+
+Q：Tailwind 的 tailwind.config.js 去哪了？
+A：v4 改成 CSS-first，主题写在 app/globals.css 的 @theme 块里，
+   PostCSS 的接入点也从 tailwindcss 换成了 @tailwindcss/postcss。
+
+Q：为什么标签链接要 encodeURIComponent？
+A：标签可能含中文或空格，直接拼进 href 会导致路由匹配不上；
+   对应的 [tag] 页面里再做一次 decodeURIComponent。
+
+Q：为什么目录能精确跳到标题？
+A：因为 TOC 的 id 和 rehype-slug 用的是同一个 github-slugger 库、同一套规则。
+
+Q：npm 报错 EPERM / 权限相关？
+A：Windows 下先确认没被杀软或沙箱拦截写 node_modules；
+   另外 npm 缓存目录被占用时，可指定 --cache 到别的路径重试。
+
+Q：页面能打开但样式全无？
+A：检查 postcss.config.mjs 是否被正确加载、app/layout.tsx 是否 import 了 globals.css。
+
+Q：用 STATIC_EXPORT=1 导出时报
+   "export const dynamic = force-static not configured on route /robots.txt"？
+A：纯静态导出（output: 'export'）要求每个路由都是静态的。app/robots.ts 和
+   app/sitemap.ts 已经补上 export const dynamic = 'force-static'，现在导出能过。
+   ★ 以后自己新增 app 下的 route.ts / 元数据路由，记得同样声明——
+     这个问题只在导出模式下才暴露，常规构建不会报错。
+
+
+--------------------------------------------------------------------------------
+十二、构建验证记录（本机实跑，不是纸面推演）
+--------------------------------------------------------------------------------
+环境：Windows / Node v24.21.0 / npm 11.19.0
+
+1. npm install                → 205 个包，约 2 分钟，exit 0
+2. npm run typecheck（tsc）    → 0 错误
+3. npm run build              → exit 0，18 个页面全部预渲染：
+     静态页(○)   /  /about  /tags  /rss.xml  /sitemap.xml  /robots.txt  /_not-found  /icon.svg
+     文章页(●)   /blog/hello-world
+                 /blog/nextjs-app-router-ssg
+                 /blog/mdx-writing-guide
+     标签页(●)   /tags/MDX  /tags/Next.js  /tags/Vercel
+                 /tags/工程实践  /tags/随笔  /tags/写作
+
+4. 产物核验（直接读 .next/server/app 下生成的 HTML，不靠肉眼看页面）：
+     - 目录锚点 vs 正文标题 id 逐项比对：三篇全部完全一致（7/7、7/7、8/8），
+       说明 github-slugger 与 rehype-slug 的规则确实对齐了
+     - 代码高亮 span（hljs-*）数量随内容变化：0 / 112 / 34，rehype-highlight 生效
+     - 自定义 Callout、GFM 表格、任务列表均正确渲染
+     - rss.xml：3 条 item，XML 声明与 channel 结构正常
+     - sitemap.xml：12 条 URL，中文标签已输出为百分号编码
+     - robots.txt：含 Host 与 Sitemap 指向
+     - 标签页内容正确：/tags/Next.js 命中 2 篇，/tags/工程实践 命中 1 篇
+
+5. 体积实测：
+     文章页 JS   原始 562 KB → gzip 后 173 KB
+     全站 CSS    16.6 KB（gzip 后更小）
+     源代码      39 个文件，约 360 KB
+     node_modules 364 MB（可随时删除后 npm install 重建）
+     .next 构建产物 58 MB（可删，npm run build 会重新生成）
+     out 静态导出产物 85 个文件 / 1.3 MB（方式 C 用，已生成好）
+
+6. 改名与静态导出（第二轮验证，改站名/作者/域名之后）：
+     - 重新构建 exit 0，产物逐项核对：
+         文章页 <title>      为什么我又把博客重写了一遍 | 计算机学习笔记
+         文章页 canonical    https://cs-notes.vercel.app/blog/hello-world
+         RSS 频道标题        计算机学习笔记 · CS Notes
+         sitemap 首条 URL    https://cs-notes.vercel.app
+         页脚作者            谢幸烨（邮箱与 GitHub 留空 → 页面不显示空链接）
+     - 旧占位词全项目扫描：浮木 / 你的名字 / you@example / your-name / your-blog
+       源码与产物里命中均为 0
+     - STATIC_EXPORT=1 导出 exit 0，产出 out/：85 个文件 1.3 MB，包含
+       index.html、about/、tags/（含中文标签目录）、blog/*/index.html、
+       rss.xml、sitemap.xml、robots.txt 与 _next/ 资源
+
+★ 关于域名：canonical / sitemap / RSS 里的地址取自 lib/site.ts 的 url，
+  优先级为 NEXT_PUBLIC_SITE_URL → VERCEL_URL → 兜底 https://cs-notes.vercel.app。
+  如果你最终用的域名不是 cs-notes.vercel.app（例如用了 Netlify 给的随机域名），
+  一定要设置 NEXT_PUBLIC_SITE_URL 再重新构建，否则搜索引擎拿到的是错地址。
+
+★ Windows 执行策略：如果 PowerShell 报 "npm.ps1 无法加载 / 禁止运行脚本"，
+  改用 npm.cmd install、npm.cmd run build（本项目构建时就是这么跑的）。
+
+
+--------------------------------------------------------------------------------
+文档结束。改站名/作者/域名请直奔 lib/site.ts，改配色请直奔 app/globals.css 的 @theme。
+--------------------------------------------------------------------------------

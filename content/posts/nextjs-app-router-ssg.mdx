@@ -1,0 +1,119 @@
+---
+title: 'App Router 里把博客做成纯静态：SSG、元数据与 RSS'
+date: '2026-08-12'
+summary: '记录这个站真正跑起来的关键几步：构建期读完 Markdown、generateStaticParams 生成路径、generateMetadata 管 SEO，以及一个不依赖插件的 RSS 路由。'
+tags: ['Next.js', 'MDX', 'Vercel']
+draft: false
+---
+
+这个博客的核心只有一句话：**在构建期把 Markdown 变成 HTML**。下面按数据流动的顺序拆开讲。
+
+## 第一步：把 Markdown 读成数据
+
+文章放在 `content/posts/` 下，用 gray-matter 把 frontmatter 和正文分开：
+
+```ts
+import fs from 'node:fs';
+import path from 'node:path';
+import matter from 'gray-matter';
+
+const POSTS_DIR = path.join(process.cwd(), 'content', 'posts');
+
+export function getPostBySlug(slug: string) {
+  const raw = fs.readFileSync(path.join(POSTS_DIR, `${slug}.mdx`), 'utf8');
+  const { data, content } = matter(raw);
+
+  return {
+    slug,
+    title: String(data.title ?? slug),
+    date: new Date(data.date).toISOString(),
+    tags: Array.isArray(data.tags) ? data.tags : [],
+    content,
+  };
+}
+```
+
+因为 `process.cwd()` 在构建时就是项目根目录，`node:fs` 可以直接用——**这些代码只在服务端跑，永远不会进浏览器**。
+
+## 第二步：把文章路径预先算出来
+
+```tsx
+export function generateStaticParams() {
+  return getAllPostSlugs().map((slug) => ({ slug }));
+}
+
+// 只放行构建期生成过的路径，其余一律 404
+export const dynamicParams = false;
+```
+
+`next build` 的输出里，这几行会变成一张静态路径清单：
+
+```
+● /blog/hello-world
+● /blog/mdx-writing-guide
+● /blog/nextjs-app-router-ssg
+```
+
+### 为什么要 dynamicParams = false
+
+不写的话，Next 会为没预渲染的 slug 保留按需渲染的能力——对有数据库的站点是好事，对纯文件博客是多余的运行时风险：URL 拼错了不进 404，而是走一遍读文件的逻辑。
+
+## 第三步：SEO 交给 generateMetadata
+
+```tsx
+export async function generateMetadata({ params }) {
+  const { slug } = await params;      // Next 15 起 params 是 Promise
+  const post = getPostBySlug(slug);
+
+  return {
+    title: post.title,
+    description: post.summary,
+    alternates: { canonical: `/blog/${post.slug}` },
+    openGraph: { type: 'article', publishedTime: post.date, tags: post.tags },
+  };
+}
+```
+
+<Callout type="warn" title="最容易忘的一步">
+只在页面里写 <code>&lt;title&gt;</code> 是不够的，还要在 <code>app/layout.tsx</code> 里配好 <code>metadataBase</code>。
+否则 canonical 和 og:image 会输出相对路径，分享到社交平台时抓不到图。
+</Callout>
+
+## 第四步：RSS 不需要装插件
+
+RSS 就是一个 XML 字符串，用 Route Handler 拼出来最省事：
+
+```ts
+export const dynamic = 'force-static';
+
+export function GET() {
+  const items = getAllPosts().map((post) => `
+    <item>
+      <title>${escapeXml(post.title)}</title>
+      <link>${site.url}/blog/${post.slug}</link>
+      <pubDate>${new Date(post.date).toUTCString()}</pubDate>
+    </item>`).join('');
+
+  return new Response(`<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>${items}</channel></rss>`, {
+    headers: { 'Content-Type': 'application/xml; charset=utf-8' },
+  });
+}
+```
+
+## 关于缓存的取舍
+
+| 方案 | 何时重新生成 | 适合 |
+| --- | --- | --- |
+| 默认 SSG | 只在 `next build` 时 | 文章型博客（本站） |
+| `revalidate = 3600` | 每小时 | 有评论、有外部数据 |
+| 完全动态 | 每次请求 | 需要登录态、实时数据 |
+
+静态方案的代价很直白：**改一个字也要重新部署**。对个人博客来说这笔交易划算——部署只要二十秒，而换来的是不需要服务器、不需要监控、几乎不可能挂掉。
+
+## 踩过的坑
+
+<Callout type="info" title="MDX 是严格模式">
+正文里的 <code>&lt;</code> 和 <code>{'{'}</code> 会被当成 JSX 语法。写比较运算符要么放进行内代码，
+要么用全角字符，否则构建会直接报错——好在报错发生在构建期，不会烂到线上。
+</Callout>

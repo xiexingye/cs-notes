@@ -1,0 +1,390 @@
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   1. 设计令牌（Tailwind v4 的 CSS-first 配置）
+   @theme 里的变量会自动生成对应工具类，例如 --color-ink → text-ink / bg-ink
+   ------------------------------------------------------------------ */
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "PingFang SC",
+    "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "Cascadia Code", Consolas,
+    "Liberation Mono", Menlo, monospace;
+
+  --color-canvas: #fbfaf8;
+  --color-surface: #ffffff;
+  --color-ink: #1c1b19;
+  --color-muted: #6f6c66;
+  --color-line: #e6e2db;
+  --color-accent: #0f766e;
+  --color-accent-soft: #e3f4f1;
+
+  --radius-card: 14px;
+}
+
+/* 深色模式：只覆盖令牌，不动任何组件代码（无需 JS 切换，跟随系统） */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #14161a;
+    --color-surface: #1b1e24;
+    --color-ink: #e9e7e3;
+    --color-muted: #9d9a93;
+    --color-line: #2b2f37;
+    --color-accent: #5eead4;
+    --color-accent-soft: #14322f;
+  }
+}
+
+/* 代码高亮配色（rehype-highlight 输出 .hljs-* 类名，这里自己定色，不引第三方主题文件） */
+:root {
+  --code-comment: #8b8878;
+  --code-keyword: #b45309;
+  --code-string: #15803d;
+  --code-number: #9333ea;
+  --code-title: #1d4ed8;
+  --code-attr: #0f766e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --code-comment: #7f8b99;
+    --code-keyword: #f0a868;
+    --code-string: #86d99a;
+    --code-number: #c4a2ff;
+    --code-title: #7cb7ff;
+    --code-attr: #5eead4;
+  }
+}
+
+/* ------------------------------------------------------------------
+   2. 基础样式
+   ------------------------------------------------------------------ */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem; /* 锚点跳转时避开吸顶页头 */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "kern";
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background-color: var(--color-accent-soft);
+    color: var(--color-ink);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ------------------------------------------------------------------
+   3. 组件类
+   ------------------------------------------------------------------ */
+@layer components {
+  .shell {
+    width: 100%;
+    max-width: 46rem;
+    margin-inline: auto;
+    padding-inline: 1.25rem;
+  }
+
+  .card {
+    display: block;
+    padding: 1.15rem 1.25rem;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-card);
+    background-color: var(--color-surface);
+    transition: border-color 0.18s ease, transform 0.18s ease;
+  }
+
+  .card:hover {
+    border-color: var(--color-accent);
+    transform: translateY(-2px);
+  }
+
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.1rem 0.55rem;
+    border: 1px solid var(--color-line);
+    border-radius: 999px;
+    font-size: 0.78rem;
+    color: var(--color-muted);
+    background-color: var(--color-surface);
+  }
+
+  .tag:hover {
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+  }
+
+  .nav-link {
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    color: var(--color-muted);
+  }
+
+  .nav-link:hover {
+    color: var(--color-accent);
+    background-color: var(--color-accent-soft);
+  }
+
+  .callout {
+    margin: 1.5rem 0;
+    padding: 0.9rem 1.1rem;
+    border-left: 3px solid var(--color-accent);
+    border-radius: 0 10px 10px 0;
+    background-color: var(--color-accent-soft);
+    font-size: 0.95rem;
+  }
+
+  .callout-title {
+    display: block;
+    margin-bottom: 0.25rem;
+    font-weight: 600;
+    color: var(--color-accent);
+  }
+}
+
+/* ------------------------------------------------------------------
+   4. 文章正文排版（.prose 包住 MDX 渲染结果）
+   ------------------------------------------------------------------ */
+.prose {
+  font-size: 1.02rem;
+  line-height: 1.9;
+  color: var(--color-ink);
+}
+
+.prose > * + * {
+  margin-top: 1.15rem;
+}
+
+.prose h2,
+.prose h3 {
+  position: relative;
+  margin-top: 2.6rem;
+  margin-bottom: 0.25rem;
+  font-weight: 700;
+  line-height: 1.45;
+  scroll-margin-top: 5rem;
+}
+
+.prose h2 {
+  font-size: 1.4rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--color-line);
+}
+
+.prose h3 {
+  font-size: 1.14rem;
+}
+
+.heading-anchor {
+  margin-left: 0.4rem;
+  color: var(--color-line);
+  font-weight: 400;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.prose h2:hover .heading-anchor,
+.prose h3:hover .heading-anchor,
+.heading-anchor:focus-visible {
+  opacity: 1;
+  color: var(--color-accent);
+}
+
+.prose p {
+  margin-block: 0;
+}
+
+.prose a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.prose strong {
+  font-weight: 700;
+}
+
+.prose ul,
+.prose ol {
+  padding-left: 1.4rem;
+}
+
+.prose ul {
+  list-style: disc;
+}
+
+.prose ol {
+  list-style: decimal;
+}
+
+.prose li + li {
+  margin-top: 0.4rem;
+}
+
+.prose li::marker {
+  color: var(--color-muted);
+}
+
+/* GFM 任务列表 */
+.prose li.task-list-item {
+  list-style: none;
+  margin-left: -1.4rem;
+}
+
+.prose input[type="checkbox"] {
+  margin-right: 0.5rem;
+  accent-color: var(--color-accent);
+}
+
+.prose blockquote {
+  margin-inline: 0;
+  padding: 0.2rem 0 0.2rem 1rem;
+  border-left: 3px solid var(--color-line);
+  color: var(--color-muted);
+}
+
+.prose hr {
+  margin-block: 2.5rem;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 10px;
+  border: 1px solid var(--color-line);
+}
+
+.prose figcaption {
+  margin-top: 0.5rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+/* 行内代码与代码块 */
+.prose code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  padding: 0.12em 0.4em;
+  border-radius: 6px;
+  background-color: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+.prose pre {
+  overflow-x: auto;
+  padding: 1rem 1.15rem;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-card);
+  background-color: var(--color-surface);
+  line-height: 1.7;
+}
+
+.prose pre code {
+  display: block;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.86rem;
+}
+
+/* GFM 表格 */
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.93rem;
+}
+
+.prose th,
+.prose td {
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--color-line);
+  text-align: left;
+}
+
+.prose thead th {
+  background-color: var(--color-accent-soft);
+  font-weight: 600;
+}
+
+/* ------------------------------------------------------------------
+   5. highlight.js 令牌配色
+   ------------------------------------------------------------------ */
+.hljs-comment,
+.hljs-quote {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-name {
+  color: var(--code-keyword);
+}
+
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: var(--code-string);
+}
+
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-selector-attr,
+.hljs-selector-pseudo {
+  color: var(--code-number);
+}
+
+.hljs-title,
+.hljs-title.class_,
+.hljs-title.function_,
+.hljs-section,
+.hljs-selector-id,
+.hljs-selector-class {
+  color: var(--code-title);
+}
+
+.hljs-attr,
+.hljs-property,
+.hljs-type,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-params {
+  color: var(--code-attr);
+}
+
+.hljs-deletion {
+  color: #dc2626;
+}
+
+.hljs-emphasis {
+  font-style: italic;
+}
+
+.hljs-strong {
+  font-weight: 700;
+}
