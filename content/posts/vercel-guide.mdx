@@ -1,0 +1,175 @@
+---
+title: 'Vercel 功能梳理与使用说明：把这个博客推上线'
+date: '2026-09-24'
+summary: 'Vercel 提供的功能有哪些，以及把本站从本地推到线上的完整流程：环境变量、自定义域名、看构建日志、回滚、预览部署。'
+tags: ['Vercel', '部署', 'Next.js']
+cover: '/og-cover.svg'
+draft: false
+---
+
+这个博客是纯静态的：文章是仓库里的 `.mdx`，构建时编译成 HTML。所以选托管平台时我的要求只有三条——**能自动构建、能全球分发、配置越少越好**。Vercel 三条都满足，而且对 Next.js 是零配置识别，于是就用它了。
+
+<Callout type="info" title="这篇写什么">
+  只写 **Vercel 提供了哪些功能**，以及**把这个站推上线、日常维护的完整操作步骤**。
+  不涉及平台对比与选型争论——那些结论取决于你的具体场景，抄别人的没意义。
+</Callout>
+
+## Vercel 提供的功能，按重要性排
+
+### 1. Git 集成：push 就是发布
+
+把 GitHub 仓库接进来之后，每次 `git push` 到主分支都会自动触发一次构建并上线。这件事的价值不在于"省了几步操作"，而在于**它把发布这件事从我脑子里删掉了**——我不用记得"改完要部署"，就像不用记得"保存后要提交"一样。
+
+配套的还有：
+
+- 构建缓存：依赖没变时不重装 `node_modules`，第二次以后的构建通常十几秒
+- 构建日志：失败时能看到具体是哪一行崩的
+- 构建与部署解耦：构建成功才切换流量，构建失败线上还是旧版本
+
+### 2. Preview Deployment：每个分支一个独立网址
+
+这是我最喜欢的功能。开一个 Pull Request 或者推一个非主分支，Vercel 会给你**一个独立的、带随机后缀的预览地址**，跑的是那个分支的代码。
+
+对我这种"改样式怕改坏线上"的人太有用了：样式改完推分支 → 打开预览地址确认 → 满意了再合并。
+
+<Callout type="tip" title="预览部署和线上是同一套构建逻辑">
+  预览部署用的构建命令、依赖版本跟生产完全一致，所以"预览里正常、线上出问题"这种情况很少见。
+  唯一的差别是环境变量——生产变量默认不会带进预览环境（可以单独配置）。
+</Callout>
+
+### 3. 生产部署与即时回滚
+
+线上一次只跑一个版本，但历史版本都留着。**回滚不需要重新构建**：在 Deployments 列表里找到上一个正常的部署，点 Promote（或 Rollback），几秒钟流量就切回去了。
+
+紧急情况下这个功能能救命——比如线上挂了，先回滚，再慢慢排查。
+
+### 4. 全球 CDN 与自动 HTTPS
+
+静态产物会被分发到边缘节点，用户就近取。这一层不需要配置：不用开 CDN、不用管缓存头（静态资源自动带长缓存，`_next/static` 下的文件名带哈希，改内容就是换文件名，不存在缓存穿透问题）。
+
+域名配好后 HTTPS 证书自动签发和续期，不用管。
+
+### 5. 环境变量：分环境三套
+
+每个变量可以分别配置 **Production / Preview / Development** 三套值，这对同一个项目要用不同数据库或不同域名的场景很关键。
+
+⚠️ 一个必须记住的机制差异：
+
+| 变量类型 | 生效时机 | 改了之后 |
+| --- | --- | --- |
+| `NEXT_PUBLIC_*` | **构建时内联进产物** | 必须 **Redeploy** 才生效 |
+| 普通变量（服务端读） | 运行时读取 | 下次请求/重新部署后生效 |
+
+本站的 `NEXT_PUBLIC_SITE_URL` 属于第一类。所以流程是：改环境变量 → **Deployments → 最新一条 → Redeploy**。漏了这一步，`canonical`、RSS、sitemap 里会一直是旧域名。
+
+### 6. 自定义域名
+
+加域名、按提示改 DNS 就行，支持裸域（`example.com`）和 `www` 子域，也可以配置两者之间的重定向。证书是自动的。
+
+### 7. 日志
+
+分两层，排查问题时用得上：
+
+- **Build Logs**：构建期输出。我这里最常看的是 `Generating static pages` 那几行，确认页面数量对不对
+- **Runtime Logs**：运行期输出。纯静态站几乎用不到；一旦你加了 API 路由或服务端函数，这里就是你的 `console.log`
+
+### 8. 命令行工具（CLI）
+
+```bash
+npx vercel          # 首次登录并关联项目
+npx vercel --prod   # 部署到生产环境
+npx vercel dev      # 本地跑一个贴近 Vercel 环境的开发服务器
+npx vercel env pull # 把线上环境变量拉到本地 .env.local
+npx vercel logs     # 看运行日志
+```
+
+`vercel env pull` 这个尤其值得记：新换电脑后不用手动抄一遍环境变量。
+
+### 9. 其他能力（本站没用上，但值得知道）
+
+| 能力 | 说明 | 本站用不用 |
+| --- | --- | --- |
+| Serverless / Edge Functions | 写 API 路由，或用中间件做鉴权、A/B、地理位置 | ❌ 纯静态用不到 |
+| 图片优化 | `next/image` 在 Vercel 上自动转 WebP、按需裁切 | ❌ 关了（静态导出不支持） |
+| ISR / 按需重验证 | 页面先静态、到期或收到通知后再后台重新生成 | ❌ 用最简单的全量构建 |
+| Redirects / Rewrites / Headers | 重定向、反代、自定义响应头 | ❌ 暂无需求 |
+| Cron Jobs | 定时任务 | ❌ |
+| Analytics / Speed Insights | 访问统计与真实用户性能数据 | ❌ |
+| Deployment Protection | 预览部署需要登录才能看，防止草稿被外人访问 | ⭕ 默认就带 |
+
+## 把本站部署上线：完整流程
+
+### 第 1 步：推到 GitHub
+
+```bash
+cd C:\Users\AppleRepair\Desktop\nextjs-mdx-blog
+git remote add origin https://github.com/<用户名>/cs-notes.git
+git push -u origin main
+```
+
+### 第 2 步：在 Vercel 导入
+
+1. 打开 [vercel.com](https://vercel.com) → 用 GitHub 账号登录
+2. **Add New → Project** → 选中 `cs-notes` 仓库 → **Import**
+3. Framework Preset 会自动识别为 **Next.js**；Root Directory、Build Command、Output Directory **全部保持默认**
+4. 点 **Deploy**，等约 40 秒
+
+<Callout type="tip" title="这一步本地什么都不用跑">
+  构建发生在 Vercel 的服务器上。你的电脑可以关机——只要代码推上去了，部署照样完成。
+  这就是"不本地运行也能访问"的关键。
+</Callout>
+
+### 第 3 步：配环境变量
+
+到 **Settings → Environment Variables** 加一条：
+
+```
+NEXT_PUBLIC_SITE_URL = https://你的真实域名
+```
+
+然后 **Deployments → 最新一条 → ⋯ → Redeploy**。
+不配置也能跑（代码会退回用 Vercel 注入的部署域名），但**绑自定义域名后必须配**，否则 `canonical` 指向的是 `.vercel.app` 那个地址。
+
+### 第 4 步：绑自定义域名（可选）
+
+**Settings → Domains → Add**，填域名后按提示到域名商处改 DNS 记录，等生效即可，证书自动签发。
+
+## 日常使用
+
+### 发一篇文章
+
+```bash
+# 1. 在 content/posts/ 新建 xxx.mdx，写完
+# 2. 提交推送
+git add -A
+git commit -m "post: 文章标题"
+git push
+```
+
+Vercel 自动重建上线，本地一次都不用启动服务。**草稿机制**：frontmatter 里写 `draft: true`，构建时会被过滤，线上看不到，但本地开发能看见——所以可以放心地把半成品推进仓库。
+
+### 构建失败了怎么办
+
+先看 **Deployments → 失败的那条 → Build Logs**，从最后一行往上找第一个报错。本站最常见的三类：
+
+| 现象 | 原因 | 解决 |
+| --- | --- | --- |
+| 构建报语法错误 | `.mdx` 正文里出现了裸的 `<` 或 `{` | 包进行内代码，或用全角字符 |
+| 页面数量不对 | 新文章被 `draft: true` 挡住了 | 改成 `false` 再推 |
+| 域名相关但构建成功 | 环境变量没设，或设了没 Redeploy | 补变量后重新部署 |
+
+### 回滚
+
+**Deployments → 找到上一个正常版本 → ⋯ → Promote to Production**。不用重新构建，几秒完成。
+
+### 试改版而不影响线上
+
+推一个分支或开 Draft PR → 拿到预览地址 → 满意再合并。这是 Preview Deployment 最实用的用法。
+
+## 小结
+
+- Vercel 解决的是**"构建 + 分发"**这两件事，其余（写作、内容管理）它不管，也不需要它管
+- 对纯静态站来说，它就是个会自动构建的 CDN；函数、ISR 那些能力可以完全无视
+- 最容易踩的坑只有一个：**`NEXT_PUBLIC_*` 变量是构建期内联的，改了必须 Redeploy**
+
+下一篇打算写这个博客的**内容层设计**：为什么用文件名当 URL、frontmatter 怎么定字段、以及目录锚点是怎么和正文标题对齐的。
